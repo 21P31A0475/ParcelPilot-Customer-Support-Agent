@@ -35,22 +35,16 @@ class AgentState(TypedDict):
     customer : str 
     role: str
 
-
 def System_Prompt():
     return SystemMessage(content='''You are the ParcelPilot internal support agent.
 
 You MUST use the available tools to investigate every factual support question before answering. Do not answer from memory when account, order, ticket, policy, agreement, SOP, or product information is needed.
-
 Tool selection:
 - If the user gives a ticket ID such as TKT-504, call ticket_lookup first.
 - If the user gives an order ID such as ORD-1001, call order_lookup first.
 - If the user asks about a named customer/account, call account_lookup when the account is needed.
 - If the question asks about policy, SLA, cancellation, service credit, product behavior, or a customer agreement, call document_search.
 - For questions that require both operational data and policy, call the needed data tool and then document_search.
-- If the user asks about repeated issue patterns, recurring issues, common problems, issue trends, or patterns across tickets, MUST call proactive_issue_detection().
-- When proactive_issue_detection() returns results, use those results directly in the answer. Do not say that no repeated issues were found.
-- A repeated issue means the same issue appearing in two or more tickets.
-- The customer_count field indicates how many distinct customers are represented in the detected pattern.
 
 Current decision source priority:
 1. Signed customer agreement
@@ -59,21 +53,16 @@ Current decision source priority:
 4. Historical tickets are context only and never policy authority.
 
 The deprecated Support Policy v2 must not be used for current requests.
-
 Preflight evidence may already be provided before you answer.
-
 If preflight evidence contains the requested information, use that evidence directly.
-Do not say that a tool failed or that information is unavailable when the evidence
-already contains the answer.
-
-For customer-specific questions, prefer the signed customer agreement when it is
-present and active.
-
+Do not say that a tool failed or that information is unavailable when the evidence already contains the answer.
+For customer-specific questions, prefer the signed customer agreement when it is present and active.
 For state-changing work, first investigate and prepare the action. Never claim the action was completed before human approval and execution.
 
 You are an internal ParcelPilot support/operations assistant. Do not expose information outside the authorised business context.
 The currently authorized customer context is the configured customer. Do not disclose or retrieve another customer's confidential agreement, SLA, cancellation terms, service credits, pricing, or account-specific information.
 If the user asks for information belonging to another customer, refuse the request and offer to provide information for the authorized customer instead.''')
+    
 async def Build_Agent():
     client = MultiServerMCPClient(SERVER)
     tools = await client.get_tools()
@@ -92,10 +81,9 @@ async def Build_Agent():
     async def First_lookup(State: AgentState):
         """Use a simple trainer-style router to guarantee the first factual lookup.
 
-        The LLM still reasons and can call tools later. This node only makes sure
-        an obvious ticket/order/account/document question has source evidence
-        before the first answer.
-        """
+        The LLM still reasons and can call tools later. This node only makes sure an obvious ticket/order/account/document question has source evidence
+        before the first answer."""
+        
         if not State['messages']:
             return {'messages': []}
 
@@ -126,8 +114,7 @@ async def Build_Agent():
             customer = 'Beacon Retail'
         elif 'axis labs' in low:
             customer = 'Axis Labs'
-                # Customer-level authorization guardrail.
-        # A support user may only access documents for the configured customer.
+               
         if customer and ALLOWED_CUSTOMER:
             if customer.lower() != ALLOWED_CUSTOMER.lower():
                 new_messages.append(SystemMessage(content=(
@@ -146,32 +133,20 @@ async def Build_Agent():
             result = await tool_map['account_lookup'].ainvoke({'account_id': '', 'customer_name': customer})
             new_messages.append(SystemMessage(content='Preflight account evidence:\n' + json.dumps(result, default=str)))
 
-        document_words = [
-            'policy', 'sla', 'response target', 'p1', 'p2', 'p3',
-            'cancel', 'cancellation', 'fee', 'service credit', 'credit',
-            'agreement', 'contract', 'booked', 'picked_up', 'picked up',
-            'delivered', 'product', 'known issue', 'bulk upload', 'webhook'
-        ]
-        pattern_words = [
-            'repeated issue','repeated issues','repeated ticket','repeated tickets','issue pattern','issue patterns',
+        document_words = ['policy', 'sla', 'response target', 'p1', 'p2', 'p3','cancel', 'cancellation', 'fee', 'service credit', 'credit',
+            'agreement', 'contract', 'booked', 'picked_up', 'picked up','delivered', 'product', 'known issue', 'bulk upload', 'webhook']
+        
+        pattern_words = [ 'repeated issue','repeated issues','repeated ticket','repeated tickets','issue pattern','issue patterns',
             'ticket pattern','ticket patterns','recurring issue','recurring issues','common issues','common problems']
 
         if any(word in low for word in pattern_words) and 'proactive_issue_detection' in tool_map:
             result = await tool_map['proactive_issue_detection'].ainvoke({})
-            print("\nDEBUG REPEATED ISSUE RESULT:")
-            print(json.dumps(result, indent=2, default=str))
-            print("\n")
 
-        new_messages.append(
-            SystemMessage(
-                content='Preflight repeated-issue evidence:\n'
-                + json.dumps(result, default=str)
-            )
-        )
+        new_messages.append(SystemMessage(content='Preflight repeated-issue evidence:\n'+ json.dumps(result, default=str)))
+        
         if any(word in low for word in document_words) and 'document_search' in tool_map:
             result = await tool_map['document_search'].ainvoke({'query': text, 'customer': customer})
             new_messages.append(SystemMessage(content='Preflight document evidence:\n' + json.dumps(result, default=str)))
-
         return {'messages': new_messages}
 
     tool_node = ToolNode(tools)
@@ -238,8 +213,7 @@ async def main():
         if query.lower() == 'exit':
             break
         result = await chatbot.ainvoke(
-            {'messages': [HumanMessage(content=query)],'action': {},'approved': False,'role': ALLOWED_ROLE,'customer': ALLOWED_CUSTOMER},
-            config=config)
+            {'messages': [HumanMessage(content=query)],'action': {},'approved': False,'role': ALLOWED_ROLE,'customer': ALLOWED_CUSTOMER},config=config)
         print('Assistant:', result['messages'][-1].content)
 
 if __name__ == '__main__':
