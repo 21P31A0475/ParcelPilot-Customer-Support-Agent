@@ -1,0 +1,10 @@
+langgraph
+langchain-openai
+langchain-mcp-adapters
+langchain-core
+fastmcp
+python-dotenv
+pandas
+openpyxl
+pypdf
+streamlit
